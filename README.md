@@ -68,9 +68,7 @@ pip install -r requirements.txt
 
 ## How do I run this?
 
-1. Make a data folder and add your data files to said folder.
-2. Adjust the configuration which is detailed in the repoistory_schema.md!
-3. Run generate_qc_report.py!
+Please read the instructions in instructions.md. 
 
 Cheers, 
 
