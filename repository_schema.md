@@ -1,3 +1,6 @@
+### 🗂️ Updated `repository_schema.md`
+
+
 # STR_automation Repository Schema
 
 This schema describes the repository-only contents of the `STR_automation` project. It excludes untracked or local-only files such as generated `*.pdf` reports and temporary outputs.
@@ -5,6 +8,7 @@ This schema describes the repository-only contents of the `STR_automation` proje
 ## Repository Map
 
 ```text
+
 STR_automation/
 │
 ├── .devcontainer/                    # Dev Container Configuration
@@ -22,6 +26,7 @@ STR_automation/
 ├── qc_validation.py                  # Polars-driven data validation & QC rule engine
 ├── pdf_content_builder.py            # Presentation layer: PDF story builder & chart generator
 ├── pdf_report_utils.py               # Document styles & table formatting helpers
+├── export_utils.py                   # Archive builder: README text generator & ZIP compilation
 │
 │   # --- EXTENSION MODULES (NON-NCRMP / ARCHIVED) ---
 ├── Station_wrangle.py                # ESA station metadata wrangling (Not required for NCRMP)
@@ -29,8 +34,7 @@ STR_automation/
 ```
 
 ## Diagram of Repo Flow
-
-```text
+``` text
                      +---------------------------------------+
                      |        NCRMP Source Data CSV          |
                      |  (e.g., NCRMP_ESD_TEMPERATURE_2025)   |
@@ -42,6 +46,7 @@ STR_automation/
                      |           qc_validation.py            |
                      |  - Runs streaming rules on LazyFrame  |
                      |  - Flags range & timeline anomalies   |
+                     |  - Validates 15°C - 40°C thresholds   |
                      +-------------------+-------------------+
                                          |
                                          | Passes metrics dict & stream
@@ -58,17 +63,20 @@ STR_automation/
 |                         generate_qc_report.py                                  |
 |  - Main Orchestrator / Entry Point                                             |
 |  - Controls output target directories dynamically via `final` switch           |
-|  - Compiles PDF Document / Conditionally streams out sequential CSV chunks     |
+|  - Compiles PDF Document / Dispatches structural exports to export_utils.py    |
 +----------------------------------------+---------------------------------------+
                                          |
                      +-------------------+-------------------+
                      |                                       |
                      v (final=False)                         v (final=True)
-       +---------------------------+            +---------------------------+
-       | Current Running Directory |            | Production Directory Path |
-       | - QC Report PDF Only      |            | - QC Report PDF           |
-       +---------------------------+            | - Sliced Subsections (CSV)|
-                                                +---------------------------+
+       +---------------------------+            +------------------------------------------+
+       | Current Running Directory |            | Isolate Target Folder (file_prefix/)     |
+       | - QC Report PDF Only      |            |  Managed by export_utils.py pipeline:    |
+       +---------------------------+            |  - QC Report PDF                         |
+                                                |  - Structural README File                |
+                                                |  - Master Data Archive (*.zip)           |
+                                                |  - Sliced Partition Archive (*_split.zip)|
+                                                +------------------------------------------+
 
 ===================================================================================
   [EXTENSIONS / SEPARATE DATASET WORKFLOW] (Not required for core NCRMP pipeline)
@@ -77,58 +85,49 @@ STR_automation/
   |   Station_wrangle.py    | ------------> |  STR_file_Wrangle.py    |
   |   (ESA Metadata Setup)  |               | (ESA CSV Aggregator)    |
   +-------------------------+               +-------------------------+
+
 ```
 
 ## ⚙️ Configuration Guide: What to Change and Why
 All user-configurable variables are isolated at the bottom of generate_qc_report.py within the if __name__ == "__main__": block, or inside the generate_qc_report function definition itself.
 
 
-### 1. File Paths (if __name__ == "__main__":)
+### 1. Runtime Metadata & File Paths
+
 ``` python
-str_file = r"C:\Users\Samuel.Chiu\Documents\Repositories\STR_automation\NCRMP_STR_DATA\NCRMP_ESD_TEMPERATURE_MARIAN_2025.csv"
-output_path = r"C:\Users\Samuel.Chiu\Documents\Repositories\STR_automation\QC_Reports\NCRMP_ESD_TEMPERATURE_MARIAN_2025_QC.pdf"
+initiative = "NCRMP"
+organization = "ESD"
+data_type = "TEMPERATURE"
+region = "MARIAN"
+year = "2025"
+
+file_prefix = f"{initiative}_{organization}_{data_type}_{region}_{year}"
+str_file = rf"C:\Users\...\NCRMP_STR_DATA\NCRMP_ESD_TEMPERATURE_MARIAN_2025.csv"
+
 ```
 
-#### str_file **Line 145, generate_qc_report.py**
-What it is: The absolute system path to your raw subsurface temperature dataset.
+#### Metadata Strings & file_prefix
+**What it is:** Parameters used to auto-construct file configurations and output folder hierarchies.
+**Why change it:** Change this whenever you step into a new survey season or different geographical region to allow file engines to cleanly target text formatting metrics.
 
-Why change it: Change this whenever you receive a new year of survey data or a different regional dataset (e.g., Marianas vs. American Samoa).
-
-
-
-#### output_path ***Line 151, generate_qc_report.py***
-What it is: The intended final resting place for your production PDF report. Also what name you give the generated file. 
-
-Why change it: Update this to match the specific project folder naming conventions. Note: If final=False, only the file name at the end of this path is extracted to name your local file.
+#### str_file
+**What it is:** The absolute local path targeting your raw input subsurface temperature dataset.
+**Why change it:** Point this to your new local CSV file whenever running new source data.
 
 
+### 2. Runtime Execution Controls
 
+``` python
 
-### 2. Runtime Execution Controls (generate_qc_report.py)
-``` Python
-generate_qc_report(str_file, output_path, final=False)
-final=False (Development/Review Mode)
+generate_qc_report(str_file, file_prefix, final=False)
+
 ```
 
-#### The Execution Mode Flag (final) ***Line 157, generate_qc_report.py*** 
-Why use it: Use this during initial data exploration or when adjusting QC logic thresholds. It keeps your workspace clean by outputting only the PDF report directly into your current running terminal directory—preventing you from accidentally polluting archive directories with draft PDFs.
+#### The Execution Mode Flag(**Final**)
 
-final=True (Production/Archival Mode)
+**final=False** 
+(Development/Review Mode): Keeps your local filesystem clean by dropping only the target draft validation PDF report directly into your current running directory. No data parsing or archiving takes place.
 
-Why use it: Use this when data validation is complete and you are ready to archive the outputs. It automatically builds any missing directories specified in your output_path, saves the final report there, and initiates the data-splitting pipeline.
 
-Slicing Partition Size (chunk_size)
-Located inside the if final: block:
-
-Python
-chunk_size = 1_000_000  # Sets row count per split file
-chunk_size
-
-What it is: The exact number of rows allocated to each sub-CSV file during production export.
-
-Why change it: If your database import tools or end-user software (like Excel or specialized GIS tools) crash when loading monolithic multi-gigabyte CSVs, lower this threshold (e.g., to 500_000) to generate smaller, more manageable data packets.
-
-## Notes
-
-* `Station_wrangle.py` and `STR_file_Wrangle.py` are maintained as nonstandard, auxiliary helpers. They are useful for preparing input data, but the core report-generation flow is centered on `qc_validation.py` and `generate_qc_report.py`.
-* `requirements.txt` now reflects only the runtime dependencies required by the tracked Python scripts.
+**final=True** 
+(Production/Archival Mode): Used when data validation has passed without discrepancies. Generates the designated output directory matching **file_prefix**, creates the master and partition ZIP assets via export_utils.py, writes the template-compliant **README**, and removes intermediate staging targets automatically.

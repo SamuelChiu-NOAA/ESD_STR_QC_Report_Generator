@@ -12,18 +12,19 @@ The architecture leverages a lightweight runtime footprint, utilizing streaming 
 * **Data processing:** `polars` for memory-efficient, lazy evaluation and streaming operations
 * **Visualization:** `matplotlib` for time-series plotting
 * **PDF generation:** `reportlab` for formatted, structured QC report outputs
-* **Path handling & filesystem:** built-in `pathlib` and `os`
+* **Path handling & filesystem:** built-in `pathlib`, `os`, and `zipfile`
 
 ---
 
 ## 🗂️ Core Pipeline Components
 
-The core repository follows a strict separation of concerns between data processing, presentation layout, and orchestration:
+The core repository follows a strict separation of concerns between data processing, presentation layout, export formatting, and orchestration:
 
-* **`generate_qc_report.py`** — The main orchestrator and entry point. Manages environment configurations, file paths, and output behaviors based on runtime flags.
-* **`qc_validation.py`** — The computational engine. Applies data quality control validation rules to structured STR data streams.
+* **`generate_qc_report.py`** — The main orchestrator and entry point. Manages environment configurations and dynamically shifts file generation logic between development and production runs based on the runtime flag.
+* **`qc_validation.py`** — The computational engine. Applies data quality control validation rules (including 15°C - 40°C biological threshold checking) to structured STR data streams.
 * **`pdf_content_builder.py`** — The presentation layer builder. Downsamples high-frequency streaming data, dynamically renders time-series charts, and appends tables/text to the document layout structure.
 * **`pdf_report_utils.py`** — Formatting utility layer. Converts Polars dataframes into ReportLab-friendly tables and defines global typographic styles.
+* **`export_utils.py`** — Archive bundling automation. Generates structural text descriptions via the `README` file, packages data partitions, and automatically compresses outputs into production ZIP archives.
 
 ---
 
@@ -47,11 +48,11 @@ The pipeline executes entirely through `generate_qc_report.py`. The output behav
 
 ### 1. Development & Quality Assurance Mode (`final=False`)
 * **Behavior:** Validates the dataset and generates the QC report PDF.
-* **Output Destination:** The final PDF report is dropped directly into whichever directory is currently executing the script (`current working directory`). No filesystem changes are made, and no dataset chunking occurs.
+* **Output Destination:** The final PDF report is dropped directly into whichever directory is currently executing the script (`current working directory`). No filesystem partitions are made, and no dataset chunking occurs.
 
 ### 2. Production & Archive Mode (`final=True`)
-* **Behavior:** Validates the dataset, compiles the final PDF report, and automatically safely creates missing production directories if they don't exist.
-* **Output Destination:** The PDF report is saved directly to the configured `output_path`. Simultaneously, the pipeline triggers a memory-efficient, sequential `.slice()` routine to stream out uniform 1,000,000-row CSV file partitions directly into that production folder using zero-RAM overhead `sink_csv` execution.
+* **Behavior:** Validates the dataset, compiles the final PDF report, and automatically safely creates an isolated directory matching the `file_prefix`. 
+* **Output Destination:** Streams out uniform 1,000,000-row CSV file partitions (`*_part_#.csv`) into a localized staging subdirectory (`UNZIPPED_SPLIT`), compiles an official asset layout metadata `README`, creates standalone compressed data ZIP archives, and safely handles temporary file deletions to leave a clean, structured package.
 
 ---
 
