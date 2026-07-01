@@ -21,16 +21,16 @@ STR_automation/
 ├── repository_schema.md              # Project repository layout and diagram
 ├── requirements.txt                  # Python runtime dependencies
 │
-│   # --- CORE NCRMP PIPELINE MODULES ---
 ├── generate_qc_report.py             # Orchestration script (Main Entry Point)
-├── qc_validation.py                  # Polars-driven data validation & QC rule engine
-├── pdf_content_builder.py            # Presentation layer: PDF story builder & chart generator
-├── pdf_report_utils.py               # Document styles & table formatting helpers
-├── export_utils.py                   # Archive builder: README text generator & ZIP compilation
 │
-│   # --- EXTENSION MODULES (NON-NCRMP / ARCHIVED) ---
-├── Station_wrangle.py                # ESA station metadata wrangling (Not required for NCRMP)
-└── STR_file_Wrangle.py               # ESA raw source file formatting (Not required for NCRMP)
+└── scripts/                          # --- utility Scripts ---
+    ├── qc_validation.py              # Polars-driven data validation & QC rule engine
+    ├── pdf_content_builder.py        # Presentation layer: PDF story builder & chart generator
+    ├── pdf_report_utils.py           # Document styles & table formatting helpers
+    ├── export_utils.py               # Archive builder: README text generator & ZIP compilation
+    ├── Station_wrangle.py            # ESA station metadata wrangling (Not required for NCRMP)
+    └── STR_file_Wrangle.py           # ESA raw source file formatting (Not required for NCRMP)
+
 ```
 
 ## Diagram of Repo Flow
