@@ -23,10 +23,10 @@ Open the main script orchestrator file and scroll down to the absolute bottom of
 The pipeline runs in two distinct states depending on how you toggle the final boolean parameter inside the main quality control report function call:
 
 #### Option A: Development and Review Mode (final is set to False)
-Use this mode during initial data triage, general exploration, or when checking for unexpected data spikes. To trigger it, set the final variable to False in the function parameters. This state keeps your local filesystem clean by generating only the draft validation PDF report and dropping it right into your current active terminal execution directory. No data files are split, zipped, or shifted into archive hierarchies.
+Use this mode during initial data triage, general exploration, or when checking for unexpected data spikes. To trigger it, set the final variable to False in the function parameters. This state keeps your local filesystem clean by generating only the draft validation PDF report and dropping it right into your current active terminal execution directory. No data files are split, zipped, or shifted into archive hierarchies. With a 9 gb csv of over 33 million rows this should take ~ 4 minutes.
 
 #### Option B: Production and Archival Mode (final is set to True)
-Use this mode once your initial review pass is complete, all quality control parameter warnings are accounted for, and the dataset is ready to be zipped for official archive delivery. To trigger it, change the final variable to True in the function parameters. This state automatically builds an isolated production directory named after your dataset prefix and orchestrates the complete archive package assembly.
+Use this mode once your initial review pass is complete, all quality control parameter warnings are accounted for, and the dataset is ready to be zipped for official archive delivery. To trigger it, change the final variable to True in the function parameters. This state automatically builds an isolated production directory named after your dataset prefix and orchestrates the complete archive package assembly. Adding the production steps makes this process take ~ 15 minutes for a 9gb csv. 
 
 #### To Run:
 In the Repository, run the following command from the terminal
