@@ -180,6 +180,8 @@ def run_quality_control(data: pl.LazyFrame) -> dict:
         .collect(streaming=True)
     )
 
+
+
     print(f"-> Phase 3 stream completed in {time.time() - p3_stream_start:.2f} seconds!")
     print("-> Extracting precise list instances...")
 
@@ -198,6 +200,9 @@ def run_quality_control(data: pl.LazyFrame) -> dict:
     t0 = time.time()
     qc_results['time_end_errors'] = errors_df['t_end_err'].explode().drop_nulls().unique().to_list()
     print(f"   [Done] Extracted Timestamp End errors ({time.time() - t0:.4f}s) -> Found {len(qc_results['time_end_errors'])}")
+
+    qc_results['temp_range_errors'] = errors_df['temp_err'].explode().drop_nulls().unique().to_list()
+    print(f"   [Done] Extracted Temperature Range errors -> Found {len(qc_results['temp_range_errors'])} anomalies")
     
     qc_results['duplicates'] = []
     print(f"✔ Completed Phase 3 processing in {time.time() - phase3_start:.2f}s total.")
