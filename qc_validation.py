@@ -160,7 +160,9 @@ def run_quality_control(data: pl.LazyFrame) -> dict:
         (pl.col('VALID_DATA_START') >= pl.col('DEPLOY_UTC')).alias('VALIDDATASTART_QC'),
         (pl.col('VALID_DATA_END') <= pl.col('RETRIEVE_UTC')).alias('VALIDDATAEND_QC'),
         (pl.col('TIMESTAMP') >= pl.col('VALID_DATA_START')).alias('TIMESTAMP_START_QC'),
-        (pl.col('TIMESTAMP') <= pl.col('VALID_DATA_END')).alias('TIMESTAMP_END_QC')
+        (pl.col('TIMESTAMP') <= pl.col('VALID_DATA_END')).alias('TIMESTAMP_END_QC'),
+        ((pl.col('TEMP_C') < 15.0) | (pl.col('TEMP_C') > 40.0)).alias('TEMP_OUT_BOUNDS')
+    
     ])
 
     print("-> Streaming 9 GB file for Phase 3 checks...")
@@ -173,6 +175,7 @@ def run_quality_control(data: pl.LazyFrame) -> dict:
             pl.col('INSTRUMENTSN').filter(pl.col('VALIDDATAEND_QC') == False).unique().alias('end_err'),
             pl.col('INSTRUMENTSN').filter(pl.col('TIMESTAMP_START_QC') == False).unique().alias('t_start_err'),
             pl.col('INSTRUMENTSN').filter(pl.col('TIMESTAMP_END_QC') == False).unique().alias('t_end_err'),
+            pl.col('INSTRUMENTSN').filter(pl.col('TEMP_OUT_BOUNDS') == True).unique().alias('temp_err')
         ])
         .collect(streaming=True)
     )
@@ -223,6 +226,7 @@ def run_quality_control(data: pl.LazyFrame) -> dict:
 
     print("-> Streaming 9 GB file for Phase 4 interval scans...")
     p4_stream_start = time.time()
+
     intervals = intervals_lazy.collect(streaming=True)
     print(f"-> Phase 4 stream completed in {time.time() - p4_stream_start:.2f} seconds!")
 
@@ -231,12 +235,19 @@ def run_quality_control(data: pl.LazyFrame) -> dict:
         ((pl.col('TIME2') - pl.col('TIME1')).dt.total_seconds() / 60.0).round(0).alias('INTERVAL'),
         ((pl.col('VALID_DATA_END') - pl.col('VALID_DATA_START')).dt.total_seconds() / 60.0).ceil().alias('TIMELOGGING')
     ]).with_columns([
-        (pl.col('TIMELOGGING') / pl.col('INTERVAL')).ceil().alias('OBS_EXPECTED')
+        # 🛠️ CHANGE HERE: Safe division check to prevent dividing by zero
+        pl.when(pl.col('INTERVAL') == 0)
+        .then(pl.lit(float('nan')))
+        .otherwise((pl.col('TIMELOGGING') / pl.col('INTERVAL')).ceil())
+        .alias('OBS_EXPECTED')
     ]).with_columns([
         (-1.0 * (pl.col('OBS_EXPECTED') - pl.col('OBS_ACTUAL'))).alias('OBS_DIFF')
     ])
 
-    intervals_problems = intervals.filter(pl.col('OBS_DIFF').abs() >= 3)
+    intervals_problems = intervals.filter(
+        (pl.col('OBS_DIFF').abs() >= 3) | pl.col('OBS_DIFF').is_nan()
+    )
+    
     qc_results['intervals_problems_table'] = intervals_problems.select(["INSTFIELDSUMMARYID", "INSTRUMENTSN", "LOCATION", "OBS_DIFF"])
     qc_results['intervals_table'] = intervals.select([
         pl.col("INSTFIELDSUMMARYID").alias("MISSIONINSTRUMENTID"),

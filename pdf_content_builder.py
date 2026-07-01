@@ -107,6 +107,15 @@ def build_pdf_story(story, qc, STR_lazy, styles, str_file):
         story.append(Paragraph("All TIMESTAMP are OK", normal_style))
     story.append(Spacer(1, 15))
 
+    # --- Temperature Range Checks ---
+    story.append(Paragraph("Are all recorded temperatures within expected parameters (15°C - 40°C)?", h2_style))
+    if len(qc['temp_range_errors']) > 0:
+        story.append(Paragraph("<b>WARNING:</b> Anomalous temperature thresholds breached. The following instrument serial numbers recorded observations outside 15°C - 40°C:", normal_style))
+        story.append(Paragraph(f"{qc['temp_range_errors']}", code_style))
+    else:
+        story.append(Paragraph("All sensor readings fall cleanly within normal parameters (15°C - 40°C).", normal_style))
+    story.append(Spacer(1, 15))
+
     # --- Sampling Intervals ---
     story.append(Paragraph("Do all STRs have the expected number of observations?", h2_style))
     if qc['intervals_problems_table'].is_empty():

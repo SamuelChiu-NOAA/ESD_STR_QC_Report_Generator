@@ -21,8 +21,11 @@ from qc_validation import run_quality_control
 # Import the extracted presentation layer function
 from pdf_content_builder import build_pdf_story
 
+# Utility function to generate a manifest file for production output
+from export_utils import generate_readme, zip_production_artifacts
 
-def generate_qc_report(str_file, output_path, final=False): 
+
+def generate_qc_report(str_file, file_prefix, final=False): 
     # Start the global script timer immediately
     script_start_time = time.time()
 
@@ -30,23 +33,30 @@ def generate_qc_report(str_file, output_path, final=False):
     print(f"STARTING QC REPORT GENERATION: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*60)
 
+    # Make sure the data file exists before proceeding
     if not os.path.exists(str_file):
         raise FileNotFoundError(f"Please provide a valid path for str_file. Current: {str_file}")
+    
+    # Setup the output PDF filename based on the file prefix
+    pdf_filename = f"{file_prefix}_QC_Report.pdf"
 
-    # --- PATH Configuration & Folder Management ---
-    base_output = Path(output_path)
+    # Creating output Paths based on the execution mode (final vs. development)
 
     if final:
-        # Production mode: Save to the specific path provided and ensure the directory exists
-        OUTPUT_PDF = output_path
-        output_dir = Path(OUTPUT_PDF).parent
-        if not output_dir.exists():
-            print(f"Creating missing production directory: {output_dir}")
-            output_dir.mkdir(parents=True, exist_ok=True)
+        # Production mode: Save the PDF report to the designated output directory and generate split CSV files
+        output_dir = Path(file_prefix)
+        output_pdf = output_dir / pdf_filename
+
+        # handles if the directory already exists or not, creating it if necessary
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+
     else:
-        # Dev mode: Save the QC report directly to the current working directory running the script
-        OUTPUT_PDF = Path(output_path).name  # Just the filename, e.g., 'NCRMP_ESD_TEMPERATURE_MARIAN_2025_QC.pdf'
+        # Development mode: Save the PDF report to the current working directory and do not generate split CSV files
+        output_pdf = Path(pdf_filename)
+
         print(f"Dev mode active. Saving report directly to current working directory.")
+
 
     # 1. Read everything purely as a streaming source (LazyFrame)
     STR_lazy = pl.scan_csv(
@@ -55,13 +65,16 @@ def generate_qc_report(str_file, output_path, final=False):
         try_parse_dates=True
     )
 
+
     # 2. Run QC metrics using the streaming architecture
     print("Running Quality Control metrics...")
-    qc = run_quality_control(STR_lazy)
+    qc = run_quality_control(STR_lazy) 
+
 
     # 3. Initialize PDF layout template
-    doc = SimpleDocTemplate(OUTPUT_PDF, pagesize=letter, leftMargin=54, rightMargin=54, topMargin=54, bottomMargin=54)
+    doc = SimpleDocTemplate(str(output_pdf), pagesize=letter, leftMargin=54, rightMargin=54, topMargin=54, bottomMargin=54)
     story = []
+
 
     # --- Evaluation Banner Block ---
     all_checks_passed = (
@@ -72,8 +85,10 @@ def generate_qc_report(str_file, output_path, final=False):
         len(qc['validend_errors']) == 0 and
         len(qc['time_start_errors']) == 0 and 
         len(qc['time_end_errors']) == 0 and
+        len(qc['temp_range_errors']) == 0 and
         qc['intervals_problems_table'].is_empty()
     )
+
 
     if all_checks_passed:
         success_banner_style = ParagraphStyle(
@@ -82,6 +97,7 @@ def generate_qc_report(str_file, output_path, final=False):
         )
         story.append(Paragraph("✔ STATUS: All Quality Control Checks Passed Successfully", success_banner_style))
         story.append(Spacer(1, 5))
+
 
     # Pack UI formatting layout references to pass to external builder
     report_styles = {
@@ -92,13 +108,14 @@ def generate_qc_report(str_file, output_path, final=False):
         'df_to_pdf_table': df_to_pdf_table
     }
 
+
     # Call external file layout code to construct headers, tables, and charts
     build_pdf_story(story, qc, STR_lazy, report_styles, str_file)
 
     # 4. Save and compile document structure
     print("All plots rendered. Compiling final PDF document...")
     doc.build(story)
-    print(f"Report successfully compiled: {OUTPUT_PDF}")
+    print(f"Report successfully compiled: {output_pdf}")
 
     # --- Memory-Efficient Row-Count Slice Chunking (Production Only) ---
     if final:
@@ -107,12 +124,16 @@ def generate_qc_report(str_file, output_path, final=False):
         total_rows = qc['total_records']
         chunk_size = 1_000_000  # 1 Million row limit per file partition
         total_chunks = math.ceil(total_rows / chunk_size)
+
+        # 1. Create the deeper subfolder cleanly tucked away
+        split_sub_dir = output_dir / "UNZIPPED_SPLIT"
+        split_sub_dir.mkdir(parents=True, exist_ok=True)
         
         print(f"Streaming {total_rows:,} rows across {total_chunks} sequential files into {output_dir}...")
 
         for i in range(total_chunks):
             offset = i * chunk_size
-            chunk_filename = output_dir / f"output_chunk_{i}.csv"
+            chunk_filename = split_sub_dir / f"{file_prefix}_part_{i + 1}.csv"
             
             print(f" Writing chunk {i+1}/{total_chunks}: {chunk_filename.name}")
             
@@ -121,6 +142,9 @@ def generate_qc_report(str_file, output_path, final=False):
                 .slice(offset, chunk_size)
                 .sink_csv(str(chunk_filename))
             )
+
+        generate_readme(output_pdf, total_rows, file_prefix)
+        zip_production_artifacts(output_dir, split_sub_dir, file_prefix, str_file)
 
     total_execution_time = time.time() - script_start_time
 
@@ -136,22 +160,31 @@ def generate_qc_report(str_file, output_path, final=False):
     print("="*60 + "\n")
 
 
+
+# -------------------------------------------------------------------------------------------------
+
+
 if __name__ == "__main__":
 
-    # -------------------------------------------------------------------------
-    # 1. UPDATE INPUT FILE PATH HERE
-    # Change this whenever you have a new year or region of data.
-    # -------------------------------------------------------------------------
-    str_file = r"C:\Users\Samuel.Chiu\Documents\Repositories\STR_automation\NCRMP_STR_DATA\NCRMP_ESD_TEMPERATURE_MARIAN_2025.csv"
-    
-    # -------------------------------------------------------------------------
-    # 2. UPDATE DESIRED OUTPUT DESTINATION HERE
-    # Change this to point to the official network drive or regional folder.
-    # -------------------------------------------------------------------------
-    output_path = r"C:\Users\Samuel.Chiu\Documents\Repositories\STR_automation\QC_Reports\NCRMP_ESD_TEMPERATURE_MARIAN_2025_QC.pdf"
+    # UPDATE THIS BASEd ON THE REGION AND YEAR YOU ARE PROCESSING
+    initiative = "NCRMP"
+    organization = "ESD"
+    data_type = "TEMPERATURE"
+    region = "MARIAN"
+    year = "2025"
+
+    file_prefix = f"{initiative}_{organization}_{data_type}_{region}_{year}"
 
     # -------------------------------------------------------------------------
-    # 3. TOGGLE EXECUTION MODE HERE
+    # STR DATA PATH BELOW: Update this to point to the correct STR data file for your region and year.
+    # -------------------------------------------------------------------------
+
+    str_file = rf"C:\Users\Samuel.Chiu\Documents\Repositories\STR_automation\NCRMP_STR_DATA\NCRMP_ESD_TEMPERATURE_MARIAN_2025.csv"   
+    
+
+
+    # -------------------------------------------------------------------------
+    # TOGGLE EXECUTION MODE HERE
     # Change final=False to final=True when you are ready to archive.
     # -------------------------------------------------------------------------
-    generate_qc_report(str_file, output_path, final=False)
+    generate_qc_report(str_file, file_prefix, final=False)
