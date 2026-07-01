@@ -15,14 +15,14 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 
 # Custom report utilities and logic layout imports
-from pdf_report_utils import title_style, h2_style, normal_style, code_style, df_to_pdf_table, ParagraphStyle
-from qc_validation import run_quality_control
+from scripts.pdf_report_utils import title_style, h2_style, normal_style, code_style, df_to_pdf_table, ParagraphStyle
+from scripts.qc_validation import run_quality_control
 
 # Import the extracted presentation layer function
-from pdf_content_builder import build_pdf_story
+from scripts.pdf_content_builder import build_pdf_story
 
 # Utility function to generate a manifest file for production output
-from export_utils import generate_readme, zip_production_artifacts
+from scripts.export_utils import generate_readme, zip_production_artifacts
 
 
 def generate_qc_report(str_file, file_prefix, final=False): 
