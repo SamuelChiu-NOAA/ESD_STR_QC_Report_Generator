@@ -28,6 +28,13 @@ Use this mode during initial data triage, general exploration, or when checking 
 #### Option B: Production and Archival Mode (final is set to True)
 Use this mode once your initial review pass is complete, all quality control parameter warnings are accounted for, and the dataset is ready to be zipped for official archive delivery. To trigger it, change the final variable to True in the function parameters. This state automatically builds an isolated production directory named after your dataset prefix and orchestrates the complete archive package assembly.
 
+#### To Run:
+In the Repository, run the following command from the terminal
+
+```
+python .\generate_qc_report.py
+```
+
 ---
 
 ### Production Package Architecture
